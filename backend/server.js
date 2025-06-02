@@ -44,7 +44,7 @@ const upload = multer({
   }
 });
 
-const genAI = new GoogleGenerativeAI('AIzaSyB-3qynn5lSKcnG6nkww3BLNv_Cdpi7M7Q');
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 const FIELD_TEMPLATES = {
   auto: {
