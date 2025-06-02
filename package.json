@@ -1,0 +1,22 @@
+{
+  "name": "insurance-tool",
+  "version": "1.0.0",
+  "description": "Insurance policy PDF processing tool with AI extraction",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm start",
+    "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
+    "start:backend": "cd backend && npm start",
+    "start:frontend": "cd frontend && npm run build && serve -s build -l 3000",
+    "build": "cd frontend && npm run build",
+    "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "serve": "^14.2.1"
+  },
+  "keywords": ["insurance", "pdf", "ai", "data-extraction"],
+  "author": "",
+  "license": "ISC"
+}

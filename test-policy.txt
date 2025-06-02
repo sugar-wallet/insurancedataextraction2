@@ -1,0 +1,27 @@
+AUTO INSURANCE POLICY
+
+Policy Number: AUTO123456789
+Coverage Type: Comprehensive
+Policy Start Date: 01/01/2024
+Policy End Date: 12/31/2024
+Deductible: $500
+
+Insured Vehicle:
+Make: Honda
+Model: Civic
+Year: 2020
+VIN: 1HGBH41JXMN109186
+
+Policy Holder:
+Name: John Smith
+Address: 123 Main Street, Anytown, CA 90210
+Date of Birth: 05/15/1985
+
+Coverage Details:
+Liability Coverage: $100,000/$300,000
+Comprehensive Coverage: $50,000
+Collision Coverage: $50,000
+Windshield Coverage: Included
+
+Premium: $1,200 annually
+Excess: $500
