@@ -9,18 +9,24 @@
     "test": "jest"
   },
   "dependencies": {
-    "express": "^4.19.2",
-    "multer": "^1.4.5-lts.1",
-    "cors": "^2.8.5",
-    "pdf-parse": "^1.1.1",
     "@google/generative-ai": "^0.21.0",
-    "fs-extra": "^11.2.0"
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "express": "^4.19.2",
+    "fs-extra": "^11.2.0",
+    "multer": "^1.4.5-lts.1",
+    "pdf-parse": "^1.1.1"
   },
   "devDependencies": {
-    "nodemon": "^3.1.4",
-    "jest": "^29.7.0"
+    "jest": "^29.7.0",
+    "nodemon": "^3.1.4"
   },
-  "keywords": ["insurance", "pdf", "ai", "data-extraction"],
+  "keywords": [
+    "insurance",
+    "pdf",
+    "ai",
+    "data-extraction"
+  ],
   "author": "",
   "license": "ISC"
 }
