@@ -12,7 +12,8 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -46,11 +47,13 @@ const upload = multer({
   }
 });
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'AIzaSyB-3qynn5lSKcnG6nkww3BLNv_Cdpi7M7Q';
+console.log('Gemini API Key loaded:', GEMINI_API_KEY ? 'Yes' : 'No');
+const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
 const FIELD_TEMPLATES = {
   auto: {
-    known: ['policy_number', 'policy_start_date', 'policy_end_date'],
+    known: ['policy_number', 'policy_start_date', 'policy_end_date', 'policy_date'],
     unknown: [
       // Vehicle Details
       'registration_number', 'car_make', 'car_model', 'car_year', 'car_value', 'body_type', 'transmission', 
@@ -62,10 +65,10 @@ const FIELD_TEMPLATES = {
       'years_full_licence', 'residency_type',
       
       // Coverage & Finance
-      'preferred_excess', 'payment_schedule', 'usage_type', 'annual_kilometres', 
+      'preferred_excess', 'usage_type', 'annual_kilometres', 
       'finance_status', 'finance_provider', 'windscreen_excess_waiver', 
       'rental_car_coverage', 'roadside_assistance', 'personal_belongings_coverage',
-      'premium', 'payment_frequency',
+      'premium', 'annual_premium', 'scheduled_payment_amount', 'payment_frequency', 'trailer_coverage', 'special_terms',
       
       // History & Security
       'claims_last_5_years', 'claim_years', 'driving_convictions', 
@@ -128,12 +131,23 @@ async function fileToGenerativePart(path, mimeType) {
   };
 }
 
-app.post('/api/upload-pdf', upload.single('pdf'), async (req, res) => {
+app.post('/api/upload-pdf', (req, res, next) => {
+  upload.single('pdf')(req, res, (err) => {
+    if (err) {
+      console.error('Multer error:', err);
+      return res.status(400).json({ error: `File upload error: ${err.message}` });
+    }
+    next();
+  });
+}, async (req, res) => {
   try {
     console.log('PDF upload request received');
+    console.log('Headers:', req.headers);
+    console.log('Body:', req.body);
+    console.log('File:', req.file);
     
     if (!req.file) {
-      console.log('No file uploaded');
+      console.log('No file uploaded - multer might have rejected it');
       return res.status(400).json({ error: 'No PDF file uploaded' });
     }
 
@@ -145,8 +159,9 @@ app.post('/api/upload-pdf', upload.single('pdf'), async (req, res) => {
     const pdfData = await pdfParse(pdfBuffer);
     const extractedText = pdfData.text;
     console.log('PDF parsed successfully. Text length:', extractedText.length);
+    // Debug log removed to prevent encoding issues
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro-preview-05-06' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro-preview-06-05' });
     console.log('Gemini model initialized');
     
     // Check if this might be a carjam report
@@ -161,11 +176,18 @@ app.post('/api/upload-pdf', upload.single('pdf'), async (req, res) => {
     ${isCarjamReport ? 'Extract vehicle details for AUTO insurance purposes:' : 'Identify ALL policies in the document and classify each as: auto, home, contents, life, health, or commercial.'}
     
     For AUTO/VEHICLE ${isCarjamReport ? 'details' : 'insurance'}, extract these specific fields with their common variations:
+    POLICY INFORMATION (for insurance documents):
+    - policy_number: "policy number", "policy no", "policy #", "certificate number", "policy ref"
+    - policy_start_date: "period of insurance from", "start date", "effective date", "inception date", "policy begins"
+    - policy_end_date: "period of insurance to", "end date", "expiry date", "renewal date", "policy expires"
+    - policy_date: "date of issue", "document date", "created date"
+    
+    VEHICLE INFORMATION:
     - registration_number: "number plate", "rego", "registration", "plate number", "vehicle registration"
     - car_make: "manufacturer", "brand", "make", "vehicle make"
     - car_model: "model", "vehicle model"
     - car_year: "year of manufacture", "year", "YOM", "model year", "first registered"
-    - car_value: "vehicle value", "market value", "sum insured", "insured value", "agreed value", "car worth"
+    - car_value: "vehicle value", "market value", "sum insured", "insured value", "agreed value", "car worth", "agreed value $"
     - body_type: "hatchback", "wagon", "sedan", "SUV", "ute", "van", "body style", "vehicle type"
     - transmission: "automatic", "manual", "auto", "gear type", "gearbox", "trans"
     - engine_capacity: "engine size", "cc", "displacement", "litres", "engine displacement", "capacity"
@@ -185,14 +207,14 @@ app.post('/api/upload-pdf', upload.single('pdf'), async (req, res) => {
     - years_full_licence: "years on full licence", "full licence held"
     - residency_type: "citizen", "permanent resident", "visa", "residency status"
     - preferred_excess: "excess", "deductible", "voluntary excess"
-    - payment_schedule: "monthly", "annually", "fortnightly", "payment frequency"
     - usage_type: "business", "personal", "private", "commercial use"
     - annual_kilometres: "km per year", "annual mileage", "kilometres driven"
     - finance_status: "under finance", "loan", "financed", "security interest"
     - finance_provider: "finance company", "loan provider", "lienholder"
-    - windscreen_excess_waiver: "glass cover", "windscreen cover", "glass protection"
-    - rental_car_coverage: "rental vehicle", "courtesy car", "replacement vehicle"
-    - roadside_assistance: "breakdown", "roadside", "emergency assistance"
+    - windscreen_excess_waiver: "glass cover", "windscreen cover", "glass protection", "excess-free glass", "excess free glass"
+    - rental_car_coverage: "rental vehicle", "courtesy car", "replacement vehicle", "hire vehicle", "alternative transport"
+    - roadside_assistance: "breakdown", "roadside", "emergency assistance", "roadside rescue"
+    - trailer_coverage: "trailer", "trailer cover"
     - personal_belongings_coverage: "contents cover", "personal items", "belongings"
     - claims_last_5_years: "claims history", "previous claims", "accident history"
     - claim_years: "when were claims", "claim dates", "years of claims"
@@ -200,10 +222,13 @@ app.post('/api/upload-pdf', upload.single('pdf'), async (req, res) => {
     - immobiliser_security: "alarm", "immobiliser", "security system", "anti-theft"
     - modifications: "mods", "alterations", "non-standard", "aftermarket"
     - additional_drivers: "named drivers", "other drivers", "additional driver details"
-    - drivers_under_25: "young drivers", "under 25", "driver ages"
+    - drivers_under_25: "young drivers", "under 25", "driver ages", "drivers under 25 are excluded"
     - excluded_providers: "don't want", "exclude", "not interested in"
-    - premium: "annual premium", "monthly premium", "premium amount", "cost", "price"
-    - payment_frequency: "payment frequency", "how often", "payment schedule"
+    - special_terms: "special terms and conditions", "special conditions", "exclusions", "policy exclusions"
+    - premium: "total adjusted premium", "total premium", "premium total", "premium amount"
+    - annual_premium: "annual premium", "yearly premium", "per annum", "p.a."
+    - scheduled_payment_amount: "fortnightly", "monthly payment", "instalment amount", "payment amount", "$62.48", "due date amount"
+    - payment_frequency: "payment frequency", "fortnightly", "monthly", "annually", "payment schedule", "direct debit"
     
     Return in this format:
     {
@@ -223,15 +248,40 @@ app.post('/api/upload-pdf', upload.single('pdf'), async (req, res) => {
     
     ${isCarjamReport ? 'IMPORTANT: This is a vehicle report, so insurance_type should be "auto".' : 'IMPORTANT: If multiple policies exist (e.g., home AND contents), return each as a separate object in the policies array.'}
     
+    DATE EXTRACTION RULES:
+    - Look for "Period of insurance" with from/to dates (e.g., "20 November 2024 to 20 November 2025")
+    - Extract policy_start_date and policy_end_date from these period statements
+    - Look for "Date" field at the top of the document for policy_date
+    - Format dates as DD/MM/YYYY or MM/DD/YYYY as found in the document
+    
+    COVERAGE EXTRACTION RULES:
+    - Look for sections listing optional coverages with YES/NO indicators
+    - Extract boolean values for coverages like excess-free glass, roadside rescue, trailer, etc.
+    - Look for "Sum Insured" or "Agreed Value" sections for car_value
+    - Extract the exact premium amount including currency symbol
+    - For ASB policies: Look for "Your policy number:" section, "Policy start/end" dates
+    - Check "Your vehicle details" section for car information
+    - Look for "Total adjusted premium" which may show $0.00 even if there are payment amounts
+    - Check "Optional benefits" or coverage tables with YES/NO values
+    - Look for payment schedule tables with dates and amounts (e.g., "29 March 2024 $62.48")
+    - Extract BOTH the total premium AND the scheduled payment amounts
+    - Note if payments are fortnightly, monthly, or annual
+    
     Policy text:
-    ${extractedText.substring(0, 6000)}
+    ${extractedText.substring(0, 12000)}
     `;
 
     console.log('Calling Gemini API...');
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
-    console.log('Gemini API response received');
+    let text;
+    try {
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      text = response.text();
+      console.log('Gemini API response received');
+    } catch (geminiError) {
+      console.error('Gemini API error:', geminiError);
+      throw new Error(`AI processing failed: ${geminiError.message}`);
+    }
     
     let extractedData;
     try {
@@ -255,7 +305,7 @@ app.post('/api/upload-pdf', upload.single('pdf'), async (req, res) => {
     policies.forEach((policy, index) => {
       const insuranceType = policy.insurance_type || 'auto';
       // Use carjam template if it's a carjam report
-      const template = isCarjamReport ? FIELD_TEMPLATES.carjam : (FIELD_TEMPLATES[insuranceType] || FIELD_TEMPLATES.auto);
+      const template = isCarjamReport ? FIELD_TEMPLATES.auto : (FIELD_TEMPLATES[insuranceType] || FIELD_TEMPLATES.auto);
       
       const categorizedFields = {
         known: {},
@@ -328,6 +378,9 @@ app.post('/api/upload-pdf', upload.single('pdf'), async (req, res) => {
 app.post('/api/upload-text-image', upload.single('file'), async (req, res) => {
   try {
     console.log('Text/Image upload request received');
+    console.log('Request headers:', req.headers);
+    console.log('Request body:', req.body);
+    console.log('Request file:', req.file);
     
     // Handle both multipart form data and JSON body
     const textInput = req.body.text || (req.headers['content-type']?.includes('application/json') && req.body?.text);
@@ -339,7 +392,7 @@ app.post('/api/upload-text-image', upload.single('file'), async (req, res) => {
     let extractedText = '';
     let prompt = '';
     
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro-preview-05-06' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro-preview-06-05' });
 
     if (textInput) {
       // Direct text input
@@ -838,7 +891,7 @@ app.get('/api/health', (req, res) => {
 app.get('/api/test-gemini', async (req, res) => {
   try {
     console.log('Testing Gemini API...');
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro-preview-05-06' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro-preview-06-05' });
     const result = await model.generateContent('Say "Hello from Gemini!"');
     const response = await result.response;
     const text = response.text();
@@ -850,6 +903,10 @@ app.get('/api/test-gemini', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+
+// Set timeout to 5 minutes for long PDF processing
+server.timeout = 300000; // 5 minutes
+server.keepAliveTimeout = 310000; // Slightly longer than timeout

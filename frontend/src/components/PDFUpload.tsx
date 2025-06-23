@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { ExtractedData } from '../App';
+import { API_ENDPOINTS } from '../config/api';
 
 interface PDFUploadProps {
   onUploadSuccess: (data: ExtractedData) => void;
@@ -37,7 +38,7 @@ const PDFUpload: React.FC<PDFUploadProps> = ({
     formData.append('pdf', file);
 
     try {
-      const response = await fetch('http://localhost:3001/api/upload-pdf', {
+      const response = await fetch(API_ENDPOINTS.uploadPdf, {
         method: 'POST',
         body: formData,
       });

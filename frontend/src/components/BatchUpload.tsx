@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { ExtractedData } from '../App';
+import { API_ENDPOINTS } from '../config/api';
 
 interface FileItem {
   id: string;
@@ -84,7 +85,7 @@ const BatchUpload: React.FC<BatchUploadProps> = ({ onProcessComplete, onError })
           
           if (fileItem.type === 'pdf') {
             formData.append('pdf', fileItem.file);
-            const response = await fetch('http://localhost:3001/api/upload-pdf', {
+            const response = await fetch(API_ENDPOINTS.uploadPdf, {
               method: 'POST',
               body: formData,
             });
@@ -93,7 +94,7 @@ const BatchUpload: React.FC<BatchUploadProps> = ({ onProcessComplete, onError })
             result = data.data;
           } else {
             formData.append('file', fileItem.file);
-            const response = await fetch('http://localhost:3001/api/upload-text-image', {
+            const response = await fetch(API_ENDPOINTS.uploadTextImage, {
               method: 'POST',
               body: formData,
             });
@@ -102,7 +103,7 @@ const BatchUpload: React.FC<BatchUploadProps> = ({ onProcessComplete, onError })
             result = data.data;
           }
         } else if (fileItem.text) {
-          const response = await fetch('http://localhost:3001/api/upload-text-image', {
+          const response = await fetch(API_ENDPOINTS.uploadTextImage, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ text: fileItem.text }),

@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { ExtractedData } from '../App';
+import { API_ENDPOINTS } from '../config/api';
 
 interface MultiFileUploadProps {
   onUploadSuccess: (data: ExtractedData) => void;
@@ -40,8 +41,8 @@ const MultiFileUpload: React.FC<MultiFileUploadProps> = ({
     
     // Determine which endpoint to use based on file type
     const endpoint = file.type === 'application/pdf' 
-      ? 'http://localhost:3001/api/upload-pdf'
-      : 'http://localhost:3001/api/upload-text-image';
+      ? API_ENDPOINTS.uploadPdf
+      : API_ENDPOINTS.uploadTextImage;
     
     formData.append(file.type === 'application/pdf' ? 'pdf' : 'file', file);
 
@@ -74,7 +75,7 @@ const MultiFileUpload: React.FC<MultiFileUploadProps> = ({
     setIsLoading(true);
 
     try {
-      const response = await fetch('http://localhost:3001/api/upload-text-image', {
+      const response = await fetch(API_ENDPOINTS.uploadTextImage, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -24,6 +24,69 @@ const BatchDataReview: React.FC<BatchDataReviewProps> = ({ results, onReset }) =
     }));
   };
 
+  const saveChanges = () => {
+    // Update the results with edited fields
+    const updatedResults = results.map((result, idx) => {
+      if (idx !== selectedResult && !showMerged) return result;
+      
+      return {
+        ...result,
+        policies: result.policies.map(policy => {
+          const policyEdits = editedFields[policy.id];
+          if (!policyEdits) return policy;
+          
+          const updatedKnown = { ...policy.categorized_fields.known };
+          const updatedUnknown = { ...policy.categorized_fields.unknown };
+          
+          // Update existing known fields
+          Object.entries(updatedKnown).forEach(([fieldName, fieldData]) => {
+            if (policyEdits[fieldName]) {
+              updatedKnown[fieldName] = {
+                ...fieldData,
+                value: policyEdits[fieldName],
+                confidence: 1.0 // Set to 100% since user manually entered
+              };
+            }
+          });
+          
+          // Move filled missing fields to known fields
+          Object.keys(updatedUnknown).forEach(fieldName => {
+            if (policyEdits[fieldName] && policyEdits[fieldName].trim()) {
+              updatedKnown[fieldName] = {
+                value: policyEdits[fieldName],
+                confidence: 1.0 // Set to 100% since user manually entered
+              };
+              delete updatedUnknown[fieldName];
+            }
+          });
+          
+          return {
+            ...policy,
+            categorized_fields: {
+              known: updatedKnown,
+              unknown: updatedUnknown
+            }
+          };
+        })
+      };
+    });
+    
+    // Update the state
+    results.splice(0, results.length, ...updatedResults);
+    
+    // Clear edited fields for saved policy
+    const currentPolicyIds = currentData?.policies.map(p => p.id) || [];
+    setEditedFields(prev => {
+      const newEditedFields = { ...prev };
+      currentPolicyIds.forEach(id => {
+        delete newEditedFields[id];
+      });
+      return newEditedFields;
+    });
+    
+    alert('Changes saved successfully!');
+  };
+
   const mergeData = () => {
     // Create a merged dataset combining all extracted fields
     const merged: ExtractedData = {
@@ -116,10 +179,18 @@ const BatchDataReview: React.FC<BatchDataReviewProps> = ({ results, onReset }) =
             policies: mergedData.policies.map(policy => ({
               type: policy.insurance_type,
               policy_number: policy.policy_number,
-              fields: Object.entries(policy.categorized_fields.known).reduce((acc, [key, value]) => {
-                acc[key] = value.value;
-                return acc;
-              }, {} as { [key: string]: string })
+              fields: {
+                ...Object.entries(policy.categorized_fields.known).reduce((acc, [key, value]) => {
+                  acc[key] = editedFields[policy.id]?.[key] || value.value;
+                  return acc;
+                }, {} as { [key: string]: string }),
+                ...Object.keys(policy.categorized_fields.unknown).reduce((acc, key) => {
+                  if (editedFields[policy.id]?.[key]) {
+                    acc[key] = editedFields[policy.id][key];
+                  }
+                  return acc;
+                }, {} as { [key: string]: string })
+              }
             }))
           }]
         };
@@ -134,10 +205,18 @@ const BatchDataReview: React.FC<BatchDataReviewProps> = ({ results, onReset }) =
             policies: result.policies.map(policy => ({
               type: policy.insurance_type,
               policy_number: policy.policy_number,
-              fields: Object.entries(policy.categorized_fields.known).reduce((acc, [key, value]) => {
-                acc[key] = value.value;
-                return acc;
-              }, {} as { [key: string]: string })
+              fields: {
+                ...Object.entries(policy.categorized_fields.known).reduce((acc, [key, value]) => {
+                  acc[key] = editedFields[policy.id]?.[key] || value.value;
+                  return acc;
+                }, {} as { [key: string]: string }),
+                ...Object.keys(policy.categorized_fields.unknown).reduce((acc, key) => {
+                  if (editedFields[policy.id]?.[key]) {
+                    acc[key] = editedFields[policy.id][key];
+                  }
+                  return acc;
+                }, {} as { [key: string]: string })
+              }
             }))
           }))
         };
@@ -285,6 +364,11 @@ Please provide the following information:
     return '#F44336';
   };
 
+  const hasUnsavedChanges = () => {
+    if (!currentData) return false;
+    return currentData.policies.some(policy => editedFields[policy.id] && Object.keys(editedFields[policy.id]).length > 0);
+  };
+
   return (
     <div className="batch-review-container">
       <div className="review-header">
@@ -296,6 +380,11 @@ Please provide the following information:
       </div>
 
       <div className="batch-controls">
+        {hasUnsavedChanges() && (
+          <button onClick={saveChanges} className="save-btn save-changes-btn">
+            💾 Save Changes
+          </button>
+        )}
         <button onClick={mergeData} className="merge-btn">
           🔀 Merge All Data
         </button>
@@ -358,7 +447,7 @@ Please provide the following information:
                           type="text"
                           value={editedFields[policy.id]?.[fieldName] || fieldData.value}
                           onChange={(e) => handleFieldEdit(policy.id, fieldName, e.target.value)}
-                          className="field-input"
+                          className={`field-input ${editedFields[policy.id]?.[fieldName] ? 'edited' : ''}`}
                         />
                         <div 
                           className="confidence-indicator"
@@ -380,13 +469,24 @@ Please provide the following information:
 
               <div className="fields-section">
                 <h4>Missing Fields</h4>
-                <div className="missing-fields">
+                <div className="fields-grid">
                   {Object.keys(policy.categorized_fields.unknown).map(fieldName => (
-                    <div key={fieldName} className="missing-field-item">
-                      <span className="missing-field-name">
+                    <div key={fieldName} className="field-item missing-field">
+                      <label className="field-label">
                         {formatFieldName(fieldName)}
-                      </span>
-                      <span className="missing-indicator">Missing</span>
+                      </label>
+                      <div className="field-value-container">
+                        <input
+                          type="text"
+                          value={editedFields[policy.id]?.[fieldName] || ''}
+                          onChange={(e) => handleFieldEdit(policy.id, fieldName, e.target.value)}
+                          className={`field-input missing-field-input ${editedFields[policy.id]?.[fieldName] ? 'edited' : ''}`}
+                          placeholder="Enter value..."
+                        />
+                        <div className="missing-indicator">
+                          Missing
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>

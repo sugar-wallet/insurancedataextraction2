@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ExtractedData, Policy } from '../App';
+import { API_ENDPOINTS } from '../config/api';
 
 interface DataReviewProps {
   data: ExtractedData;
@@ -23,19 +24,47 @@ const DataReview: React.FC<DataReviewProps> = ({ data, onReset }) => {
 
   const saveCorrections = async (policyId: string) => {
     try {
-      const response = await fetch('http://localhost:3001/api/save-corrections', {
+      const policy = data.policies.find(p => p.id === policyId);
+      if (!policy) return;
+
+      // Combine existing fields with their edited values and newly filled missing fields
+      const allFields: { [key: string]: any } = {};
+      
+      // Add known fields (with edits if any)
+      Object.entries(policy.categorized_fields.known).forEach(([fieldName, fieldData]) => {
+        allFields[fieldName] = {
+          value: editedFields[policyId]?.[fieldName] || fieldData.value,
+          confidence: fieldData.confidence,
+          source: 'extracted'
+        };
+      });
+      
+      // Add manually filled missing fields
+      Object.keys(policy.categorized_fields.unknown).forEach(fieldName => {
+        if (editedFields[policyId]?.[fieldName]) {
+          allFields[fieldName] = {
+            value: editedFields[policyId][fieldName],
+            confidence: 1.0,
+            source: 'manual'
+          };
+        }
+      });
+
+      const response = await fetch(API_ENDPOINTS.saveCorrections, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           id: policyId,
-          correctedFields: editedFields[policyId] || {}
+          correctedFields: editedFields[policyId] || {},
+          allFields: allFields,
+          insuranceType: policy.insurance_type
         }),
       });
 
       if (response.ok) {
-        alert('Corrections saved for future learning!');
+        alert('Corrections and manually entered fields saved successfully!');
       }
     } catch (error) {
       console.error('Failed to save corrections:', error);
@@ -46,7 +75,7 @@ const DataReview: React.FC<DataReviewProps> = ({ data, onReset }) => {
     setIsGeneratingQuestionnaire(true);
     
     try {
-      const response = await fetch('http://localhost:3001/api/generate-questionnaire', {
+      const response = await fetch(API_ENDPOINTS.generateQuestionnaire, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -84,7 +113,7 @@ const DataReview: React.FC<DataReviewProps> = ({ data, onReset }) => {
 
   const downloadCollectedData = async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/download-collected-data', {
+      const response = await fetch(API_ENDPOINTS.downloadCollectedData, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -127,10 +156,37 @@ const DataReview: React.FC<DataReviewProps> = ({ data, onReset }) => {
       .join(' ');
   };
 
+  // Combine all fields into one array for easier rendering
+  const getAllFields = (policy: Policy) => {
+    const fields: Array<{ name: string; value: string; confidence: number; isExtracted: boolean }> = [];
+    
+    // Add known fields
+    Object.entries(policy.categorized_fields.known).forEach(([fieldName, fieldData]) => {
+      fields.push({
+        name: fieldName,
+        value: fieldData.value,
+        confidence: fieldData.confidence,
+        isExtracted: true
+      });
+    });
+    
+    // Add unknown fields
+    Object.keys(policy.categorized_fields.unknown).forEach(fieldName => {
+      fields.push({
+        name: fieldName,
+        value: '',
+        confidence: 0,
+        isExtracted: false
+      });
+    });
+    
+    return fields;
+  };
+
   return (
     <div className="data-review-container">
-      <div className="review-header">
-        <h2>Extracted Data Review</h2>
+      <div className="review-header" style={{ backgroundColor: '#e8f5e9', padding: '2rem', borderRadius: '8px' }}>
+        <h2 style={{ color: '#2e7d32' }}>🎉 UPDATED VERSION - All Fields Are Now Editable! 🎉</h2>
         <div className="file-info">
           <p><strong>File:</strong> {data.filename}</p>
           <p><strong>Processed:</strong> {new Date(data.timestamp).toLocaleString()}</p>
@@ -168,42 +224,37 @@ const DataReview: React.FC<DataReviewProps> = ({ data, onReset }) => {
           </div>
 
           <div className="fields-section">
-            <h4>Extracted Fields</h4>
+            <h4 style={{ color: '#1976d2', fontSize: '1.5rem' }}>
+              ✏️ Edit Any Field Below (Including Missing Ones!)
+            </h4>
             <div className="fields-grid">
-              {Object.entries(policy.categorized_fields.known).map(([fieldName, fieldData]) => (
-                <div key={fieldName} className="field-item">
+              {getAllFields(policy).map((field) => (
+                <div key={field.name} className="field-item">
                   <label className="field-label">
-                    {formatFieldName(fieldName)}
+                    {formatFieldName(field.name)}
                   </label>
                   <div className="field-value-container">
                     <input
                       type="text"
-                      value={editedFields[policy.id]?.[fieldName] || fieldData.value}
-                      onChange={(e) => handleFieldEdit(policy.id, fieldName, e.target.value)}
+                      value={editedFields[policy.id]?.[field.name] || field.value}
+                      onChange={(e) => handleFieldEdit(policy.id, field.name, e.target.value)}
                       className="field-input"
+                      placeholder={field.isExtracted ? '' : '❗ Missing - Please enter manually'}
+                      style={{
+                        borderColor: field.isExtracted ? '#e0e0e0' : '#ff9800',
+                        backgroundColor: field.isExtracted ? '#fff' : '#fff3e0'
+                      }}
                     />
                     <div 
                       className="confidence-indicator"
-                      style={{ backgroundColor: getConfidenceColor(fieldData.confidence) }}
-                      title={`Confidence: ${(fieldData.confidence * 100).toFixed(1)}%`}
+                      style={{ 
+                        backgroundColor: field.isExtracted ? getConfidenceColor(field.confidence) : '#ff5722'
+                      }}
+                      title={field.isExtracted ? `Confidence: ${(field.confidence * 100).toFixed(1)}%` : 'Not found in document'}
                     >
-                      {(fieldData.confidence * 100).toFixed(0)}%
+                      {field.isExtracted ? `${(field.confidence * 100).toFixed(0)}%` : 'MISSING'}
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="fields-section">
-            <h4>Missing Fields</h4>
-            <div className="missing-fields">
-              {Object.keys(policy.categorized_fields.unknown).map(fieldName => (
-                <div key={fieldName} className="missing-field-item">
-                  <span className="missing-field-name">
-                    {formatFieldName(fieldName)}
-                  </span>
-                  <span className="missing-indicator">Missing</span>
                 </div>
               ))}
             </div>
@@ -215,7 +266,7 @@ const DataReview: React.FC<DataReviewProps> = ({ data, onReset }) => {
               className="save-corrections-btn"
               disabled={!editedFields[policy.id] || Object.keys(editedFields[policy.id]).length === 0}
             >
-              Save Corrections
+              Save All Changes
             </button>
             
             <button 
